@@ -54,6 +54,41 @@ IMG_SIZE = (224, 224)  # adjust to match your training input size
 MODEL_PATH = "GrainModel.keras"
 
 # ----------------------------------------------------------------------
+# TEST-SET CONFUSION MATRIX (from your evaluation run)
+# true_class -> {predicted_class: count}. Only non-zero cells needed.
+# Used to build a plain-language accuracy report for the UI.
+# ----------------------------------------------------------------------
+CONFUSION_DATA = {
+    "chaana_dal": {"chaana_dal": 111, "tur_dal": 2},
+    "chole":      {"chole": 113},
+    "harbara":    {"harbara": 88, "chole": 20, "masur_dal": 5},
+    "masur_dal":  {"chaana_dal": 10, "masur_dal": 103},
+    "matki":      {"matki": 113},
+    "moong":      {"moong": 113},
+    "peanut":     {"chole": 111, "peanut": 2},
+    "rice":       {"rice": 113},
+    "tur_dal":    {"tur_dal": 113},
+    "wheat":      {"masur_dal": 1, "wheat": 112},
+}
+
+
+def _class_accuracy_report():
+    """Returns list of dicts: {class, total, correct, accuracy, top_confusion}."""
+    report = []
+    for cname, preds in CONFUSION_DATA.items():
+        total = sum(preds.values())
+        correct = preds.get(cname, 0)
+        accuracy = (correct / total * 100) if total else 0.0
+        confusions = {k: v for k, v in preds.items() if k != cname}
+        top_confusion = max(confusions.items(), key=lambda x: x[1]) if confusions else None
+        report.append({
+            "class": cname,
+            "total": total,
+            "correct": correct,
+            "accuracy": accuracy,
+            "top_confusion": top_confusion,  # (predicted_class, count) or None
+        })
+    return sorted(report, key=lambda r: r["accuracy"])
 # STYLING — grain-themed green gradient
 # ----------------------------------------------------------------------
 st.markdown(
@@ -326,6 +361,83 @@ st.markdown(
         font-weight: 600;
         color: #2f2f2f;
     }
+
+    /* Accuracy report rows */
+    .acc-row {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        margin-bottom: 0.7rem;
+    }
+    .acc-label {
+        width: 110px;
+        flex-shrink: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #0b3d2e;
+    }
+    .acc-track {
+        flex-grow: 1;
+        height: 14px;
+        background: #e9eeec;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .acc-fill-good { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #1f7a5c, #37b177); }
+    .acc-fill-ok   { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #c98a1f, #e0a83e); }
+    .acc-fill-bad  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #b3402f, #d4573f); }
+    .acc-pct {
+        width: 58px;
+        flex-shrink: 0;
+        text-align: right;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #2f2f2f;
+    }
+    .acc-note {
+        width: 100%;
+        font-size: 0.78rem;
+        color: #6b7a72;
+        margin: -0.3rem 0 0.9rem 0;
+        padding-left: 118px;
+    }
+
+    /* Insight callout (flags real data/model issues in plain language) */
+    .insight-callout {
+        background: #fff4ec;
+        border-left: 5px solid #c9622b;
+        border-radius: 10px;
+        padding: 0.9rem 1.1rem;
+        margin: 1rem 0;
+    }
+    .insight-callout .insight-title {
+        font-weight: 700;
+        color: #8a3f16;
+        font-size: 0.92rem;
+        margin-bottom: 0.25rem;
+    }
+    .insight-callout .insight-body {
+        color: #4a3626;
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
+    .accuracy-summary {
+        text-align: center;
+        padding: 0.6rem 0 1.2rem 0;
+    }
+    .accuracy-summary .big-num {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.6rem;
+        font-weight: 800;
+        color: #0b3d2e;
+    }
+    .accuracy-summary .big-label {
+        color: #5a6b62;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -436,6 +548,93 @@ with st.container(border=True):
                 )
     else:
         st.info("👆 Select an image to enable classification.")
+
+# ----------------------------------------------------------------------
+# MODEL ACCURACY REPORT (explainable version of the confusion matrix)
+# ----------------------------------------------------------------------
+with st.container(border=True):
+    st.markdown("### 📊 How Accurate Is This Model?")
+    st.caption(
+        "Based on testing the model against 1,130 labeled sample images "
+        "(113 per grain type) it hadn't seen during training."
+    )
+
+    _report = _class_accuracy_report()
+    _total_correct = sum(r["correct"] for r in _report)
+    _total_images = sum(r["total"] for r in _report)
+    _overall_acc = _total_correct / _total_images * 100
+
+    st.markdown(
+        f"""
+        <div class="accuracy-summary">
+            <div class="big-num">{_overall_acc:.1f}%</div>
+            <div class="big-label">Overall accuracy across all classes</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Per-class accuracy, worst first, so problems are visible immediately
+    rows_html = ""
+    notes_html = ""
+    for r in _report:
+        display_name = CLASS_INFO.get(r["class"], (r["class"], ""))[0]
+        acc = r["accuracy"]
+        tier = "good" if acc >= 95 else ("ok" if acc >= 80 else "bad")
+        rows_html += f"""
+        <div class="acc-row">
+            <div class="acc-label">{display_name}</div>
+            <div class="acc-track">
+                <div class="acc-fill-{tier}" style="width:{acc:.1f}%;"></div>
+            </div>
+            <div class="acc-pct">{acc:.1f}%</div>
+        </div>
+        """
+        if r["top_confusion"]:
+            conf_class, conf_count = r["top_confusion"]
+            conf_name = CLASS_INFO.get(conf_class, (conf_class, ""))[0]
+            rows_html += (
+                f'<div class="acc-note">Correctly identified {r["correct"]} of '
+                f'{r["total"]} test images &nbsp;·&nbsp; most often mistaken for '
+                f'<b>{conf_name}</b> ({conf_count} times)</div>'
+            )
+        else:
+            rows_html += (
+                f'<div class="acc-note">Correctly identified all {r["correct"]} '
+                f'of {r["total"]} test images</div>'
+            )
+
+    st.markdown(rows_html, unsafe_allow_html=True)
+
+    # Plain-language callout for the one class with a real, notable issue
+    st.markdown(
+        """
+        <div class="insight-callout">
+            <div class="insight-title">⚠️ Known issue: Peanut</div>
+            <div class="insight-body">
+                The model almost never recognizes <b>Peanut</b> correctly — it
+                gets identified as <b>Chole (Chickpeas)</b> instead in the vast
+                majority of test cases. This isn't normal model uncertainty;
+                a mistake this one-sided and consistent usually means the
+                training photos for Peanut and Chole were accidentally
+                mixed up or mislabeled. If Peanut predictions matter to you,
+                it's worth double-checking those two training folders before
+                retraining.
+            </div>
+        </div>
+        <div class="insight-callout" style="border-left-color:#1f7a5c; background:#eefaf3;">
+            <div class="insight-title" style="color:#145c44;">ℹ️ Minor mix-up: Harbara &amp; Chole</div>
+            <div class="insight-body">
+                Harbara is correctly identified about 8 times out of 10. When
+                it's wrong, it's almost always mistaken for Chole — likely
+                because the two grains look visually similar (size, color,
+                and shape). All other grain types in this model are
+                identified correctly virtually every time.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ----------------------------------------------------------------------
 # SUPPORTED CLASSES SECTION
