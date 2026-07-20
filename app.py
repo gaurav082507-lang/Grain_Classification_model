@@ -130,15 +130,34 @@ st.markdown(
         margin: 0 auto;
         line-height: 1.5;
     }
+    .grain-stats {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.6rem 1.4rem;
+        margin-top: 1rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid rgba(255, 236, 179, 0.2);
+    }
+    .grain-stats span {
+        color: #eaf6ef;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
 
-    /* Glass card */
-    .glass-card {
-        background: rgba(255, 255, 255, 0.92);
-        border-radius: 18px;
-        padding: 1.8rem;
-        margin-bottom: 1.4rem;
+    /* Glass card — styles Streamlit's native st.container(border=True) wrapper.
+       (We use real containers instead of raw <div> tags because st.markdown
+       calls don't nest around other widgets — a manual </div> hack renders
+       as its own empty box rather than actually wrapping anything.) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: rgba(255, 255, 255, 0.92) !important;
+        border-radius: 18px !important;
+        border: 1px solid rgba(255,255,255,0.4) !important;
         box-shadow: 0 12px 32px rgba(0,0,0,0.22);
-        border: 1px solid rgba(255,255,255,0.4);
+        margin-bottom: 1.4rem;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        border-radius: 18px !important;
     }
 
     /* Result card */
@@ -318,11 +337,16 @@ st.markdown(
 st.markdown(
     f"""
     <div class="grain-header">
-        <div class="grain-badge">🌾 GrainModel · {len(CLASS_NAMES)} Classes</div>
+        <div class="grain-badge">🌾 EfficientNetB0 · {len(CLASS_NAMES)} Classes</div>
         <div class="grain-title">Grain &amp; Pulse Classifier</div>
         <div class="grain-subtitle">
             Upload a clear photo of grains or pulses and let the AI identify
             the type instantly — from dals and lentils to rice and wheat.
+        </div>
+        <div class="grain-stats">
+            <span>🧠 EfficientNetB0 backbone</span>
+            <span>📸 Trained on 7,500+ images</span>
+            <span>🌾 {len(CLASS_NAMES)} grain &amp; pulse classes</span>
         </div>
     </div>
     """,
@@ -346,80 +370,86 @@ def preprocess_image(img: Image.Image) -> np.ndarray:
 # ----------------------------------------------------------------------
 # UPLOAD + PREDICT CARD
 # ----------------------------------------------------------------------
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+with st.container(border=True):
+    uploaded_file = st.file_uploader(
+        "Drop a grain image here, or browse to upload",
+        type=["jpg", "jpeg", "png", "webp"],
+    )
 
-uploaded_file = st.file_uploader(
-    "Drop a grain image here, or browse to upload",
-    type=["jpg", "jpeg", "png", "webp"],
-)
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded image", use_container_width=True)
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded image", use_container_width=True)
+        if st.button("🔍 Classify Grain"):
+            try:
+                model = load_model()
+                processed = preprocess_image(image)
+                preds = model.predict(processed)[0]
 
-    if st.button("🔍 Classify Grain"):
-        try:
-            model = load_model()
-            processed = preprocess_image(image)
-            preds = model.predict(processed)[0]
+                top_idx = int(np.argmax(preds))
+                top_class = CLASS_NAMES[top_idx]
+                top_conf = float(preds[top_idx]) * 100
+                display_name, display_desc = CLASS_INFO.get(top_class, (top_class, ""))
 
-            top_idx = int(np.argmax(preds))
-            top_class = CLASS_NAMES[top_idx]
-            top_conf = float(preds[top_idx]) * 100
-            display_name, display_desc = CLASS_INFO.get(top_class, (top_class, ""))
+                st.markdown(
+                    f"""
+                    <div class="result-card">
+                        <div class="result-label">Predicted Class</div>
+                        <div class="result-class">🌾 {display_name}</div>
+                        <div class="result-conf">Confidence: <b>{top_conf:.2f}%</b> &nbsp;·&nbsp; {display_desc}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-            st.markdown(
-                f"""
-                <div class="result-card">
-                    <div class="result-label">Predicted Class</div>
-                    <div class="result-class">🌾 {display_name}</div>
-                    <div class="result-conf">Confidence: <b>{top_conf:.2f}%</b> &nbsp;·&nbsp; {display_desc}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                with st.expander("View full class probabilities", expanded=True):
+                    sorted_idx = np.argsort(preds)[::-1]
+                    rows_html = ""
+                    for i in sorted_idx:
+                        cname = CLASS_INFO.get(CLASS_NAMES[i], (CLASS_NAMES[i], ""))[0]
+                        pct = preds[i] * 100
+                        rows_html += f"""
+                        <div class="prob-row">
+                            <div class="prob-label">{cname}</div>
+                            <div class="prob-track">
+                                <div class="prob-fill" style="width:{pct:.2f}%;"></div>
+                            </div>
+                            <div class="prob-pct">{pct:.2f}%</div>
+                        </div>
+                        """
+                    st.markdown(rows_html, unsafe_allow_html=True)
 
-            with st.expander("View full class probabilities"):
-                sorted_idx = np.argsort(preds)[::-1]
-                for i in sorted_idx:
-                    cname = CLASS_INFO.get(CLASS_NAMES[i], (CLASS_NAMES[i], ""))[0]
-                    st.progress(float(preds[i]), text=f"{cname} — {preds[i]*100:.2f}%")
-
-        except Exception as e:
-            st.error(f"Model prediction failed: {e}")
-            st.info(
-                f"Make sure **{MODEL_PATH}** is in the same directory as this app, "
-                "and that the input image size matches the model's expected input shape."
-            )
-else:
-    st.info("👆 Select an image to enable classification.")
-
-st.markdown("</div>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Model prediction failed: {e}")
+                st.info(
+                    f"Make sure **{MODEL_PATH}** is in the same directory as this app, "
+                    "and that the input image size matches the model's expected input shape."
+                )
+    else:
+        st.info("👆 Select an image to enable classification.")
 
 # ----------------------------------------------------------------------
 # SUPPORTED CLASSES SECTION
 # ----------------------------------------------------------------------
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-st.markdown(
-    f"### 🌱 Supported Grains &amp; Pulses <span style='font-size:0.9rem; font-weight:400; color:#5a6b62;'>({len(CLASS_NAMES)} classes)</span>",
-    unsafe_allow_html=True,
-)
+with st.container(border=True):
+    st.markdown(
+        f"### 🌱 Supported Grains &amp; Pulses <span style='font-size:0.9rem; font-weight:400; color:#5a6b62;'>({len(CLASS_NAMES)} classes)</span>",
+        unsafe_allow_html=True,
+    )
 
-cols = st.columns(2)
-for i, cname in enumerate(CLASS_NAMES):
-    display_name, display_desc = CLASS_INFO.get(cname, (cname, ""))
-    with cols[i % 2]:
-        st.markdown(
-            f"""
-            <div class="class-chip">
-                <div class="class-chip-name">🌾 {display_name}</div>
-                <div class="class-chip-desc">{display_desc}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-st.markdown("</div>", unsafe_allow_html=True)
+    cols = st.columns(2)
+    for i, cname in enumerate(CLASS_NAMES):
+        display_name, display_desc = CLASS_INFO.get(cname, (cname, ""))
+        with cols[i % 2]:
+            st.markdown(
+                f"""
+                <div class="class-chip">
+                    <div class="class-chip-name">🌾 {display_name}</div>
+                    <div class="class-chip-desc">{display_desc}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 # ----------------------------------------------------------------------
 # FOOTER
@@ -427,6 +457,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown(
     """
     <div class="grain-footer">
+        Model: <b>EfficientNetB0</b> · trained on <b>7,500+ images</b><br>
         Built by <b>Gaurav Gupta</b> &nbsp;·&nbsp;
         <a href="https://www.linkedin.com/in/gaurav-gupta-79754a377" target="_blank">LinkedIn</a>
     </div>
