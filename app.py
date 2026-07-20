@@ -423,6 +423,10 @@ with st.container(border=True):
         preprocess_choice = st.selectbox(
             "🔧 Debug — preprocessing mode (must match training)",
             options=list(PREPROCESS_MODES.keys()),
+            index=list(PREPROCESS_MODES.keys()).index("Plain /255 (0 to 1)"),
+            help="Confirmed correct via diagnostic test: Plain /255 correctly "
+                 "classified the known Harbara sample; EfficientNet preprocess_input "
+                 "and Raw did not.",
         )
         selected_mode = PREPROCESS_MODES[preprocess_choice]
 
