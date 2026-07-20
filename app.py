@@ -218,18 +218,94 @@ st.markdown(
         border-radius: 14px;
     }
 
-    .stButton>button {
-        background: linear-gradient(135deg, #1f7a5c, #145c44);
-        color: #fff;
-        font-weight: 700;
-        border-radius: 10px;
-        border: none;
-        padding: 0.6rem 1.2rem;
+    /* Main "Classify Grain" button — covers all Streamlit button class variants */
+    .stButton>button,
+    .stButton>button p,
+    div[data-testid="stButton"] button,
+    button[kind="primary"],
+    button[kind="secondary"] {
+        background: linear-gradient(135deg, #1f7a5c, #145c44) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+        border: none !important;
+        padding: 0.6rem 1.2rem !important;
         width: 100%;
         transition: filter 0.15s ease;
     }
     .stButton>button:hover {
-        filter: brightness(1.1);
+        filter: brightness(1.15);
+    }
+
+    /* File uploader's internal "Browse files" button */
+    section[data-testid="stFileUploaderDropzone"] button,
+    section[data-testid="stFileUploaderDropzone"] button p {
+        background: #ffffff !important;
+        color: #145c44 !important;
+        border: 1.5px solid #1f7a5c !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }
+    section[data-testid="stFileUploaderDropzone"] small,
+    section[data-testid="stFileUploaderDropzone"] span,
+    section[data-testid="stFileUploaderDropzone"] div {
+        color: #2f2f2f !important;
+    }
+
+    /* Uploaded file chip */
+    div[data-testid="stFileUploaderFile"] {
+        background: #ffffff !important;
+        border-radius: 10px;
+        border: 1px solid #1f7a5c33;
+    }
+    div[data-testid="stFileUploaderFile"] span,
+    div[data-testid="stFileUploaderFile"] small {
+        color: #2f2f2f !important;
+    }
+
+    /* st.info / st.error boxes -- force readable text */
+    div[data-testid="stAlert"] {
+        background: #ffffff !important;
+        border-radius: 10px;
+    }
+    div[data-testid="stAlert"] p {
+        color: #145c44 !important;
+        font-weight: 500;
+    }
+
+    /* Custom probability bar rows (replaces st.progress) */
+    .prob-row {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        margin-bottom: 0.55rem;
+    }
+    .prob-label {
+        width: 105px;
+        flex-shrink: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #0b3d2e;
+    }
+    .prob-track {
+        flex-grow: 1;
+        height: 10px;
+        background: #e4ede8;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .prob-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1f7a5c, #2f9e73);
+    }
+    .prob-pct {
+        width: 60px;
+        flex-shrink: 0;
+        text-align: right;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2f2f2f;
     }
     </style>
     """,
