@@ -362,8 +362,18 @@ def load_model():
 
 
 def preprocess_image(img: Image.Image) -> np.ndarray:
+    """
+    IMPORTANT: EfficientNetB0 (tf.keras.applications) expects its own
+    preprocessing — NOT a plain /255 normalization. Using the wrong
+    normalization is a common cause of predictions that barely change
+    between different input images (the mismatched scale saturates
+    the first layers, so the model effectively ignores the input).
+    Swap this for whatever normalization you used during training if
+    it differs (e.g. plain /255, or ImageNet mean/std standardization).
+    """
     img = img.convert("RGB").resize(IMG_SIZE)
-    arr = np.array(img).astype("float32") / 255.0
+    arr = np.array(img).astype("float32")  # keep 0-255 range, NOT /255
+    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
     return np.expand_dims(arr, axis=0)
 
 
@@ -379,6 +389,19 @@ with st.container(border=True):
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded image", use_container_width=True)
+
+        # --- Debug info: confirms a genuinely new image is being read.
+        # If this line shows the SAME hash/mean for two different photos,
+        # the upload itself isn't refreshing (browser/widget issue).
+        # If the hash/mean correctly change but the prediction doesn't,
+        # it's a model/preprocessing issue, not an upload issue.
+        # Remove this block once you've confirmed everything works.
+        _debug_arr = np.array(image.convert("RGB"))
+        _debug_hash = hash(_debug_arr.tobytes()) & 0xFFFFFFFF
+        st.caption(
+            f"🔧 Debug — file: `{uploaded_file.name}` · size: {image.size} · "
+            f"mean pixel: {_debug_arr.mean():.2f} · hash: {_debug_hash}"
+        )
 
         if st.button("🔍 Classify Grain"):
             try:
