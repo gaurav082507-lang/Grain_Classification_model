@@ -186,12 +186,15 @@ st.markdown(
        as its own empty box rather than actually wrapping anything.) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background: rgba(255, 255, 255, 0.92) !important;
+        background-color: rgba(255, 255, 255, 0.92) !important;
         border-radius: 18px !important;
         border: 1px solid rgba(255,255,255,0.4) !important;
         box-shadow: 0 12px 32px rgba(0,0,0,0.22);
         margin-bottom: 1.4rem;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    div[data-testid="stVerticalBlockBorderWrapper"] > div,
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock"] {
+        background: transparent !important;
         border-radius: 18px !important;
     }
 
@@ -374,7 +377,7 @@ st.markdown(
         flex-shrink: 0;
         font-size: 0.9rem;
         font-weight: 600;
-        color: #0b3d2e;
+        color: #0b3d2e !important;
     }
     .acc-track {
         flex-grow: 1;
@@ -392,12 +395,12 @@ st.markdown(
         text-align: right;
         font-size: 0.85rem;
         font-weight: 700;
-        color: #2f2f2f;
+        color: #1a1a1a !important;
     }
     .acc-note {
         width: 100%;
         font-size: 0.78rem;
-        color: #6b7a72;
+        color: #4a5a52 !important;
         margin: -0.3rem 0 0.9rem 0;
         padding-left: 118px;
     }
@@ -412,12 +415,12 @@ st.markdown(
     }
     .insight-callout .insight-title {
         font-weight: 700;
-        color: #8a3f16;
+        color: #8a3f16 !important;
         font-size: 0.92rem;
         margin-bottom: 0.25rem;
     }
     .insight-callout .insight-body {
-        color: #4a3626;
+        color: #3a2a1c !important;
         font-size: 0.88rem;
         line-height: 1.5;
     }
@@ -429,10 +432,10 @@ st.markdown(
         font-family: 'Playfair Display', serif;
         font-size: 2.6rem;
         font-weight: 800;
-        color: #0b3d2e;
+        color: #0b3d2e !important;
     }
     .accuracy-summary .big-label {
-        color: #5a6b62;
+        color: #4a5a52 !important;
         font-size: 0.85rem;
         font-weight: 600;
         text-transform: uppercase;
