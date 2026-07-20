@@ -361,33 +361,18 @@ def load_model():
     return tf.keras.models.load_model(MODEL_PATH)
 
 
-PREPROCESS_MODES = {
-    "EfficientNet preprocess_input (ImageNet mean/std)": "efficientnet",
-    "Plain /255 (0 to 1)": "div255",
-    "Scaled -1 to 1": "minus1to1",
-    "Raw 0-255 (no normalization)": "raw",
-}
-
-
-def preprocess_image(img: Image.Image, mode: str) -> np.ndarray:
+def preprocess_image(img: Image.Image) -> np.ndarray:
     """
-    The normalization here MUST match whatever was used during training,
-    or the model will produce low-confidence / wrong predictions even
-    though it "runs" without error. Use the mode selector in the app
-    to test which convention your training script actually used.
+    CONFIRMED from training notebook: images went straight from
+    image_dataset_from_directory (raw 0-255 pixels, no rescale) through
+    data_augmentation into EfficientNetB0(include_top=False) with no
+    manual normalization step. Since TF 2.3+, EfficientNetB0 has its
+    Rescaling + Normalization built into the model's own first layers,
+    so raw 0-255 pixel input is correct here -- do not divide by 255
+    or call efficientnet.preprocess_input (it's a no-op anyway).
     """
     img = img.convert("RGB").resize(IMG_SIZE)
-    arr = np.array(img).astype("float32")
-
-    if mode == "efficientnet":
-        arr = tf.keras.applications.efficientnet.preprocess_input(arr)
-    elif mode == "div255":
-        arr = arr / 255.0
-    elif mode == "minus1to1":
-        arr = (arr / 127.5) - 1.0
-    elif mode == "raw":
-        pass  # no normalization
-
+    arr = np.array(img).astype("float32")  # raw 0-255, no normalization
     return np.expand_dims(arr, axis=0)
 
 
@@ -404,57 +389,10 @@ with st.container(border=True):
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded image", use_container_width=True)
 
-        # --- Debug info: confirms a genuinely new image is being read,
-        # and shows the model's actual expected input shape so you can
-        # check IMG_SIZE matches what the model was trained on.
-        # Remove this block once confirmed working.
-        _debug_arr = np.array(image.convert("RGB"))
-        _debug_hash = hash(_debug_arr.tobytes()) & 0xFFFFFFFF
-        try:
-            _model_input_shape = load_model().input_shape
-        except Exception:
-            _model_input_shape = "unavailable"
-        st.caption(
-            f"🔧 Debug — file: `{uploaded_file.name}` · size: {image.size} · "
-            f"mean pixel: {_debug_arr.mean():.2f} · hash: {_debug_hash} · "
-            f"model expects: {_model_input_shape} · app resizes to: {IMG_SIZE}"
-        )
-
-        preprocess_choice = st.selectbox(
-            "🔧 Debug — preprocessing mode (must match training)",
-            options=list(PREPROCESS_MODES.keys()),
-            index=list(PREPROCESS_MODES.keys()).index("Plain /255 (0 to 1)"),
-            help="Confirmed correct via diagnostic test: Plain /255 correctly "
-                 "classified the known Harbara sample; EfficientNet preprocess_input "
-                 "and Raw did not.",
-        )
-        selected_mode = PREPROCESS_MODES[preprocess_choice]
-
-        col_a, col_b = st.columns(2)
-        classify_clicked = col_a.button("🔍 Classify Grain")
-        diagnose_clicked = col_b.button("🧪 Test all modes")
-
-        if diagnose_clicked:
-            model = load_model()
-            st.markdown("**Diagnostic — same image, every normalization mode:**")
-            for label, mode in PREPROCESS_MODES.items():
-                try:
-                    p = model.predict(preprocess_image(image, mode), verbose=0)[0]
-                    idx = int(np.argmax(p))
-                    name = CLASS_INFO.get(CLASS_NAMES[idx], (CLASS_NAMES[idx], ""))[0]
-                    st.write(f"- **{label}** → {name} ({p[idx]*100:.2f}%)")
-                except Exception as e:
-                    st.write(f"- **{label}** → error: {e}")
-            st.info(
-                "Whichever mode above gives a high, correct-looking confidence "
-                "is the one your model was trained with — select it above and "
-                "use Classify Grain normally from now on."
-            )
-
-        if classify_clicked:
+        if st.button("🔍 Classify Grain"):
             try:
                 model = load_model()
-                processed = preprocess_image(image, selected_mode)
+                processed = preprocess_image(image)
                 preds = model.predict(processed)[0]
 
                 top_idx = int(np.argmax(preds))
