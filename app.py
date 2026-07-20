@@ -390,17 +390,23 @@ with st.container(border=True):
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded image", use_container_width=True)
 
-        # --- Debug info: confirms a genuinely new image is being read.
-        # If this line shows the SAME hash/mean for two different photos,
-        # the upload itself isn't refreshing (browser/widget issue).
-        # If the hash/mean correctly change but the prediction doesn't,
-        # it's a model/preprocessing issue, not an upload issue.
-        # Remove this block once you've confirmed everything works.
+        # --- Debug info: confirms a genuinely new image is being read,
+        # and shows the model's actual expected input shape so you can
+        # check IMG_SIZE matches what the model was trained on.
+        # If IMG_SIZE doesn't match model.input_shape, the model still
+        # runs without error but sees a resized/distorted image, which
+        # causes exactly this kind of "responds to input but often wrong"
+        # behavior. Remove this block once confirmed working.
         _debug_arr = np.array(image.convert("RGB"))
         _debug_hash = hash(_debug_arr.tobytes()) & 0xFFFFFFFF
+        try:
+            _model_input_shape = load_model().input_shape
+        except Exception:
+            _model_input_shape = "unavailable"
         st.caption(
             f"🔧 Debug — file: `{uploaded_file.name}` · size: {image.size} · "
-            f"mean pixel: {_debug_arr.mean():.2f} · hash: {_debug_hash}"
+            f"mean pixel: {_debug_arr.mean():.2f} · hash: {_debug_hash} · "
+            f"model expects: {_model_input_shape} · app resizes to: {IMG_SIZE}"
         )
 
         if st.button("🔍 Classify Grain"):
