@@ -361,19 +361,33 @@ def load_model():
     return tf.keras.models.load_model(MODEL_PATH)
 
 
-def preprocess_image(img: Image.Image) -> np.ndarray:
+PREPROCESS_MODES = {
+    "EfficientNet preprocess_input (ImageNet mean/std)": "efficientnet",
+    "Plain /255 (0 to 1)": "div255",
+    "Scaled -1 to 1": "minus1to1",
+    "Raw 0-255 (no normalization)": "raw",
+}
+
+
+def preprocess_image(img: Image.Image, mode: str) -> np.ndarray:
     """
-    IMPORTANT: EfficientNetB0 (tf.keras.applications) expects its own
-    preprocessing — NOT a plain /255 normalization. Using the wrong
-    normalization is a common cause of predictions that barely change
-    between different input images (the mismatched scale saturates
-    the first layers, so the model effectively ignores the input).
-    Swap this for whatever normalization you used during training if
-    it differs (e.g. plain /255, or ImageNet mean/std standardization).
+    The normalization here MUST match whatever was used during training,
+    or the model will produce low-confidence / wrong predictions even
+    though it "runs" without error. Use the mode selector in the app
+    to test which convention your training script actually used.
     """
     img = img.convert("RGB").resize(IMG_SIZE)
-    arr = np.array(img).astype("float32")  # keep 0-255 range, NOT /255
-    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
+    arr = np.array(img).astype("float32")
+
+    if mode == "efficientnet":
+        arr = tf.keras.applications.efficientnet.preprocess_input(arr)
+    elif mode == "div255":
+        arr = arr / 255.0
+    elif mode == "minus1to1":
+        arr = (arr / 127.5) - 1.0
+    elif mode == "raw":
+        pass  # no normalization
+
     return np.expand_dims(arr, axis=0)
 
 
@@ -393,10 +407,7 @@ with st.container(border=True):
         # --- Debug info: confirms a genuinely new image is being read,
         # and shows the model's actual expected input shape so you can
         # check IMG_SIZE matches what the model was trained on.
-        # If IMG_SIZE doesn't match model.input_shape, the model still
-        # runs without error but sees a resized/distorted image, which
-        # causes exactly this kind of "responds to input but often wrong"
-        # behavior. Remove this block once confirmed working.
+        # Remove this block once confirmed working.
         _debug_arr = np.array(image.convert("RGB"))
         _debug_hash = hash(_debug_arr.tobytes()) & 0xFFFFFFFF
         try:
@@ -409,10 +420,37 @@ with st.container(border=True):
             f"model expects: {_model_input_shape} · app resizes to: {IMG_SIZE}"
         )
 
-        if st.button("🔍 Classify Grain"):
+        preprocess_choice = st.selectbox(
+            "🔧 Debug — preprocessing mode (must match training)",
+            options=list(PREPROCESS_MODES.keys()),
+        )
+        selected_mode = PREPROCESS_MODES[preprocess_choice]
+
+        col_a, col_b = st.columns(2)
+        classify_clicked = col_a.button("🔍 Classify Grain")
+        diagnose_clicked = col_b.button("🧪 Test all modes")
+
+        if diagnose_clicked:
+            model = load_model()
+            st.markdown("**Diagnostic — same image, every normalization mode:**")
+            for label, mode in PREPROCESS_MODES.items():
+                try:
+                    p = model.predict(preprocess_image(image, mode), verbose=0)[0]
+                    idx = int(np.argmax(p))
+                    name = CLASS_INFO.get(CLASS_NAMES[idx], (CLASS_NAMES[idx], ""))[0]
+                    st.write(f"- **{label}** → {name} ({p[idx]*100:.2f}%)")
+                except Exception as e:
+                    st.write(f"- **{label}** → error: {e}")
+            st.info(
+                "Whichever mode above gives a high, correct-looking confidence "
+                "is the one your model was trained with — select it above and "
+                "use Classify Grain normally from now on."
+            )
+
+        if classify_clicked:
             try:
                 model = load_model()
-                processed = preprocess_image(image)
+                processed = preprocess_image(image, selected_mode)
                 preds = model.predict(processed)[0]
 
                 top_idx = int(np.argmax(preds))
